@@ -42,8 +42,7 @@ def _dumped_model(model: Model, model_name: str = 'test-model') -> str:
         session = AcumosSession()
         session.dump(model, model_name, dump_dir)
 
-        model_dir = os.path.join(dump_dir, model_name)
-        yield model_dir
+        yield os.path.join(dump_dir, model_name)
 
 
 @contextlib.contextmanager

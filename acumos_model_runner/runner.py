@@ -93,7 +93,11 @@ class StandaloneApplication(BaseApplication):
     def __init__(self, model_dir, host, port, workers, timeout, cors):
         self.model_dir = model_dir
         self.cors = cors
-        self.options = {'bind': "{}:{}".format(host, port), 'workers': workers, 'timeout': timeout}
+        self.options = {
+            'bind': f"{host}:{port}",
+            'workers': workers,
+            'timeout': timeout,
+        }
         super().__init__()
 
     def load_config(self):
@@ -129,11 +133,10 @@ class _CustomResolver(Resolver):
 
     def resolve_function_from_operation_id(self, operation_id):
         '''Routes model methods to a generic handler so that methods can be enumerated in the OAS'''
-        if operation_id.startswith('methods'):
-            _, method_name = operation_id.split('.')
-            return partial(methods, method_name=method_name)
-        else:
+        if not operation_id.startswith('methods'):
             return super().resolve_function_from_operation_id(operation_id)
+        _, method_name = operation_id.split('.')
+        return partial(methods, method_name=method_name)
 
 
 def _apply_cors(app, cors):

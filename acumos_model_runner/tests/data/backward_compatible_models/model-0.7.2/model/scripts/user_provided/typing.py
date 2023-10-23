@@ -101,11 +101,7 @@ __all__ = [
 
 
 def _qualname(x):
-    if sys.version_info[:2] >= (3, 3):
-        return x.__qualname__
-    else:
-        # Fall back to just name.
-        return x.__name__
+    return x.__qualname__ if sys.version_info[:2] >= (3, 3) else x.__name__
 
 
 def _trim_name(nm):
@@ -132,8 +128,7 @@ class TypingMeta(type):
 
     def __new__(cls, name, bases, namespace, *, _root=False):
         if not _root:
-            raise TypeError("Cannot subclass %s" %
-                            (', '.join(map(_type_repr, bases)) or '()'))
+            raise TypeError(f"Cannot subclass {', '.join(map(_type_repr, bases)) or '()'}")
         return super().__new__(cls, name, bases, namespace)
 
     def __init__(self, *args, **kwds):
@@ -154,7 +149,7 @@ class TypingMeta(type):
 
     def __repr__(self):
         qname = _trim_name(_qualname(self))
-        return '%s.%s' % (self.__module__, qname)
+        return f'{self.__module__}.{qname}'
 
 
 class _TypingBase(metaclass=TypingMeta, _root=True):
@@ -188,7 +183,7 @@ class _TypingBase(metaclass=TypingMeta, _root=True):
     def __repr__(self):
         cls = type(self)
         qname = _trim_name(_qualname(cls))
-        return '%s.%s' % (cls.__module__, qname)
+        return f'{cls.__module__}.{qname}'
 
     def __call__(self, *args, **kwds):
         raise TypeError("Cannot instantiate %r" % type(self))
@@ -298,17 +293,18 @@ class _TypeAlias(_TypingBase, _root=True):
         self.type_checker = type_checker
 
     def __repr__(self):
-        return "%s[%s]" % (self.name, _type_repr(self.type_var))
+        return f"{self.name}[{_type_repr(self.type_var)}]"
 
     def __getitem__(self, parameter):
         if not isinstance(self.type_var, TypeVar):
-            raise TypeError("%s cannot be further parameterized." % self)
+            raise TypeError(f"{self} cannot be further parameterized.")
         if self.type_var.__constraints__ and isinstance(parameter, type):
             if not issubclass(parameter, self.type_var.__constraints__):
-                raise TypeError("%s is not a valid substitution for %s." %
-                                (parameter, self.type_var))
+                raise TypeError(
+                    f"{parameter} is not a valid substitution for {self.type_var}."
+                )
         if isinstance(parameter, TypeVar) and parameter is not self.type_var:
-            raise TypeError("%s cannot be re-parameterized." % self)
+            raise TypeError(f"{self} cannot be re-parameterized.")
         return self.__class__(self.name, parameter,
                               self.impl_type, self.type_checker)
 
@@ -335,7 +331,7 @@ class _TypeAlias(_TypingBase, _root=True):
 
 def _get_type_vars(types, tvars):
     for t in types:
-        if isinstance(t, TypingMeta) or isinstance(t, _TypingBase):
+        if isinstance(t, (TypingMeta, _TypingBase)):
             t._get_type_vars(tvars)
 
 
@@ -346,7 +342,7 @@ def _type_vars(types):
 
 
 def _eval_type(t, globalns, localns):
-    if isinstance(t, TypingMeta) or isinstance(t, _TypingBase):
+    if isinstance(t, (TypingMeta, _TypingBase)):
         return t._eval_type(globalns, localns)
     return t
 
@@ -378,7 +374,7 @@ def _type_check(arg, msg):
         not getattr(arg, '__origin__', None) or
         isinstance(arg, TypingMeta) and arg._gorg in (Generic, _Protocol)
     ):
-        raise TypeError("Plain %s is not valid as type argument" % arg)
+        raise TypeError(f"Plain {arg} is not valid as type argument")
     return arg
 
 
@@ -393,12 +389,10 @@ def _type_repr(obj):
     if isinstance(obj, type) and not isinstance(obj, TypingMeta):
         if obj.__module__ == 'builtins':
             return _qualname(obj)
-        return '%s.%s' % (obj.__module__, _qualname(obj))
+        return f'{obj.__module__}.{_qualname(obj)}'
     if obj is ...:
         return('...')
-    if isinstance(obj, types.FunctionType):
-        return obj.__name__
-    return repr(obj)
+    return obj.__name__ if isinstance(obj, types.FunctionType) else repr(obj)
 
 
 class _Any(_FinalTypingBase, _root=True):
@@ -510,10 +504,7 @@ class TypeVar(_TypingBase, _root=True):
             raise TypeError("A single constraint is not allowed")
         msg = "TypeVar(name, constraint, ...): constraints must be types."
         self.__constraints__ = tuple(_type_check(t, msg) for t in constraints)
-        if bound:
-            self.__bound__ = _type_check(bound, "Bound must be a type.")
-        else:
-            self.__bound__ = None
+        self.__bound__ = _type_check(bound, "Bound must be a type.") if bound else None
 
     def _get_type_vars(self, tvars):
         if self not in tvars:
@@ -597,15 +588,13 @@ def _subs_tree(cls, tvars=None, args=None):
     while current.__origin__ is not None:
         orig_chain.append(current)
         current = current.__origin__
-    # Replace type variables in __args__ if asked ...
-    tree_args = []
-    for arg in cls.__args__:
-        tree_args.append(_replace_arg(arg, tvars, args))
+    tree_args = [_replace_arg(arg, tvars, args) for arg in cls.__args__]
     # ... then continue replacing down the origin chain.
     for ocls in orig_chain:
-        new_tree_args = []
-        for arg in ocls.__args__:
-            new_tree_args.append(_replace_arg(arg, ocls.__parameters__, tree_args))
+        new_tree_args = [
+            _replace_arg(arg, ocls.__parameters__, tree_args)
+            for arg in ocls.__args__
+        ]
         tree_args = new_tree_args
     return tree_args
 
@@ -654,12 +643,13 @@ def _remove_dups_flatten(parameters):
 def _check_generic(cls, parameters):
     # Check correct count for parameters of a generic cls (internal helper).
     if not cls.__parameters__:
-        raise TypeError("%s is not a generic class" % repr(cls))
+        raise TypeError(f"{repr(cls)} is not a generic class")
     alen = len(parameters)
     elen = len(cls.__parameters__)
     if alen != elen:
-        raise TypeError("Too %s parameters for %s; actual %s, expected %s" %
-                        ("many" if alen > elen else "few", repr(cls), alen, elen))
+        raise TypeError(
+            f'Too {"many" if alen > elen else "few"} parameters for {repr(cls)}; actual {alen}, expected {elen}'
+        )
 
 
 _cleanups = []
@@ -675,11 +665,10 @@ def _tp_cache(func):
 
     @functools.wraps(func)
     def inner(*args, **kwds):
-        try:
+        with contextlib.suppress(TypeError):
             return cached(*args, **kwds)
-        except TypeError:
-            pass  # All real errors (not unhashable args) are raised below.
         return func(*args, **kwds)
+
     return inner
 
 
@@ -774,9 +763,7 @@ class _Union(_FinalTypingBase, _root=True):
         if self.__origin__ is None:
             return super().__repr__()
         tree = self._subs_tree()
-        if not isinstance(tree, tuple):
-            return repr(tree)
-        return tree[0]._tree_repr(tree)
+        return repr(tree) if not isinstance(tree, tuple) else tree[0]._tree_repr(tree)
 
     def _tree_repr(self, tree):
         arg_list = []
@@ -785,7 +772,7 @@ class _Union(_FinalTypingBase, _root=True):
                 arg_list.append(_type_repr(arg))
             else:
                 arg_list.append(arg[0]._tree_repr(arg))
-        return super().__repr__() + '[%s]' % ', '.join(arg_list)
+        return f"{super().__repr__()}[{', '.join(arg_list)}]"
 
     @_tp_cache
     def __getitem__(self, parameters):
@@ -807,9 +794,7 @@ class _Union(_FinalTypingBase, _root=True):
             return Union  # Nothing to substitute
         tree_args = _subs_tree(self, tvars, args)
         tree_args = _remove_dups_flatten(tree_args)
-        if len(tree_args) == 1:
-            return tree_args[0]  # Union of a single type is that type
-        return (Union,) + tree_args
+        return tree_args[0] if len(tree_args) == 1 else (Union,) + tree_args
 
     def __eq__(self, other):
         if isinstance(other, _Union):
@@ -955,14 +940,12 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
             if gvars is None:
                 gvars = tvars
             else:
-                tvarset = set(tvars)
                 gvarset = set(gvars)
+                tvarset = set(tvars)
                 if not tvarset <= gvarset:
                     raise TypeError(
-                        "Some type variables (%s) "
-                        "are not listed in Generic[%s]" %
-                        (", ".join(str(t) for t in tvars if t not in gvarset),
-                         ", ".join(str(g) for g in gvars)))
+                        f'Some type variables ({", ".join(str(t) for t in tvars if t not in gvarset)}) are not listed in Generic[{", ".join(str(g) for g in gvars)}]'
+                    )
                 tvars = gvars
 
         initial_bases = bases
@@ -1078,7 +1061,7 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
                 arg_list.append(_type_repr(arg))
             else:
                 arg_list.append(arg[0]._tree_repr(arg))
-        return super().__repr__() + '[%s]' % ', '.join(arg_list)
+        return f"{super().__repr__()}[{', '.join(arg_list)}]"
 
     def _subs_tree(self, tvars=None, args=None):
         if self.__origin__ is None:
@@ -1101,8 +1084,7 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
         if not isinstance(params, tuple):
             params = (params,)
         if not params and self._gorg is not Tuple:
-            raise TypeError(
-                "Parameter list to %s[...] cannot be empty" % _qualname(self))
+            raise TypeError(f"Parameter list to {_qualname(self)}[...] cannot be empty")
         msg = "Parameters to generic types must be types."
         params = tuple(_type_check(p, msg) for p in params)
         if self is Generic:
@@ -1124,8 +1106,7 @@ class GenericMeta(TypingMeta, abc.ABCMeta):
             args = params
         elif self.__origin__ in (Generic, _Protocol):
             # Can't subscript Generic[...] or _Protocol[...].
-            raise TypeError("Cannot subscript already-subscripted %s" %
-                            repr(self))
+            raise TypeError(f"Cannot subscript already-subscripted {repr(self)}")
         else:
             # Subscripting a regular Generic subclass.
             _check_generic(self, params)
@@ -1178,27 +1159,25 @@ Generic = None
 
 
 def _generic_new(base_cls, cls, *args, **kwds):
-    # Assure type is erased on instantiation,
-    # but attempt to store it in __orig_class__
     if cls.__origin__ is None:
-        if (base_cls.__new__ is object.__new__ and
-                cls.__init__ is not object.__init__):
-            return base_cls.__new__(cls)
-        else:
-            return base_cls.__new__(cls, *args, **kwds)
+        return (
+            base_cls.__new__(cls)
+            if (
+                base_cls.__new__ is object.__new__
+                and cls.__init__ is not object.__init__
+            )
+            else base_cls.__new__(cls, *args, **kwds)
+        )
+    origin = cls._gorg
+    if (base_cls.__new__ is object.__new__ and
+            cls.__init__ is not object.__init__):
+        obj = base_cls.__new__(origin)
     else:
-        origin = cls._gorg
-        if (base_cls.__new__ is object.__new__ and
-                cls.__init__ is not object.__init__):
-            obj = base_cls.__new__(origin)
-        else:
-            obj = base_cls.__new__(origin, *args, **kwds)
-        try:
-            obj.__orig_class__ = cls
-        except AttributeError:
-            pass
-        obj.__init__(*args, **kwds)
-        return obj
+        obj = base_cls.__new__(origin, *args, **kwds)
+    with contextlib.suppress(AttributeError):
+        obj.__orig_class__ = cls
+    obj.__init__(*args, **kwds)
+    return obj
 
 
 class Generic(metaclass=GenericMeta):
@@ -1315,9 +1294,8 @@ class CallableMeta(GenericMeta):
             else:
                 arg_list.append(arg[0]._tree_repr(arg))
         if arg_list[0] == '...':
-            return repr(tree[0]) + '[..., %s]' % arg_list[1]
-        return (repr(tree[0]) +
-                '[[%s], %s]' % (', '.join(arg_list[:-1]), arg_list[-1]))
+            return f'{repr(tree[0])}[..., {arg_list[1]}]'
+        return f"{repr(tree[0])}[[{', '.join(arg_list[:-1])}], {arg_list[-1]}]"
 
     def __getitem__(self, parameters):
         """A thin wrapper around __getitem_inner__ to provide the latter
@@ -1332,11 +1310,11 @@ class CallableMeta(GenericMeta):
         args, result = parameters
         if args is Ellipsis:
             parameters = (Ellipsis, result)
-        else:
-            if not isinstance(args, list):
-                raise TypeError("Callable[args, result]: args must be a list."
-                                " Got %.100r." % (args,))
+        elif isinstance(args, list):
             parameters = (tuple(args), result)
+        else:
+            raise TypeError("Callable[args, result]: args must be a list."
+                            " Got %.100r." % (args,))
         return self.__getitem_inner__(parameters)
 
     @_tp_cache
@@ -1397,22 +1375,20 @@ class _ClassVar(_FinalTypingBase, _root=True):
     def __getitem__(self, item):
         cls = type(self)
         if self.__type__ is None:
-            return cls(_type_check(item,
-                       '{} accepts only single type.'.format(cls.__name__[1:])),
-                       _root=True)
-        raise TypeError('{} cannot be further subscripted'
-                        .format(cls.__name__[1:]))
+            return cls(
+                _type_check(item, f'{cls.__name__[1:]} accepts only single type.'),
+                _root=True,
+            )
+        raise TypeError(f'{cls.__name__[1:]} cannot be further subscripted')
 
     def _eval_type(self, globalns, localns):
         new_tp = _eval_type(self.__type__, globalns, localns)
-        if new_tp == self.__type__:
-            return self
-        return type(self)(new_tp, _root=True)
+        return self if new_tp == self.__type__ else type(self)(new_tp, _root=True)
 
     def __repr__(self):
         r = super().__repr__()
         if self.__type__ is not None:
-            r += '[{}]'.format(_type_repr(self.__type__))
+            r += f'[{_type_repr(self.__type__)}]'
         return r
 
     def __hash__(self):
@@ -1566,10 +1542,8 @@ def no_type_check(arg):
                 obj.__no_type_check__ = True
             if isinstance(obj, type):
                 no_type_check(obj)
-    try:
+    with contextlib.suppress(TypeError):
         arg.__no_type_check__ = True
-    except TypeError:  # built-in classes
-        pass
     return arg
 
 
@@ -1651,18 +1625,16 @@ class _ProtocolMeta(GenericMeta):
         # Find all attributes defined in the protocol.
         attrs = self._get_protocol_attrs()
 
-        for attr in attrs:
-            if not any(attr in d.__dict__ for d in cls.__mro__):
-                return False
-        return True
+        return not any(
+            all(attr not in d.__dict__ for d in cls.__mro__) for attr in attrs
+        )
 
     def _get_protocol_attrs(self):
-        # Get all Protocol base classes.
-        protocol_bases = []
-        for c in self.__mro__:
-            if getattr(c, '_is_protocol', False) and c.__name__ != '_Protocol':
-                protocol_bases.append(c)
-
+        protocol_bases = [
+            c
+            for c in self.__mro__
+            if getattr(c, '_is_protocol', False) and c.__name__ != '_Protocol'
+        ]
         # Get attributes included in protocol.
         attrs = set()
         for base in protocol_bases:
@@ -2115,10 +2087,8 @@ def _make_nmtuple(name, types):
     # Prior to PEP 526, only _field_types attribute was assigned.
     # Now, both __annotations__ and _field_types are used to maintain compatibility.
     nm_tpl.__annotations__ = nm_tpl._field_types = collections.OrderedDict(types)
-    try:
+    with contextlib.suppress(AttributeError, ValueError):
         nm_tpl.__module__ = sys._getframe(2).f_globals.get('__name__', '__main__')
-    except (AttributeError, ValueError):
-        pass
     return nm_tpl
 
 
@@ -2160,7 +2130,7 @@ class NamedTupleMeta(type):
         # update from user namespace without overriding special namedtuple attributes
         for key in ns:
             if key in _prohibited:
-                raise AttributeError("Cannot overwrite NamedTuple attribute " + key)
+                raise AttributeError(f"Cannot overwrite NamedTuple attribute {key}")
             elif key not in _special and key not in nm_tpl._fields:
                 setattr(nm_tpl, key, ns[key])
         return nm_tpl
@@ -2194,7 +2164,7 @@ class NamedTuple(metaclass=NamedTupleMeta):
     """
     _root = True
 
-    def __new__(self, typename, fields=None, **kwargs):
+    def __new__(cls, typename, fields=None, **kwargs):
         if kwargs and not _PY36:
             raise TypeError("Keyword syntax for NamedTuple is only supported"
                             " in Python 3.6+")
@@ -2390,7 +2360,7 @@ class io:
     BinaryIO = BinaryIO
 
 
-io.__name__ = __name__ + '.io'
+io.__name__ = f'{__name__}.io'
 sys.modules[io.__name__] = io
 
 
@@ -2408,5 +2378,5 @@ class re:
     Match = Match
 
 
-re.__name__ = __name__ + '.re'
+re.__name__ = f'{__name__}.re'
 sys.modules[re.__name__] = re

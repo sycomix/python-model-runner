@@ -83,8 +83,9 @@ def create_oas(metadata, protobuf):
     methods = [_format_method(name, method, major_minor) for name, method in metadata['methods'].items()]
     template_path = data_path('templates', version_dir)
     env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True)
-    gen_yaml = env.get_template('base.yaml').render(model=metadata, methods=methods, definitions=defs_yaml)
-    return gen_yaml
+    return env.get_template('base.yaml').render(
+        model=metadata, methods=methods, definitions=defs_yaml
+    )
 
 
 def _format_method(name, method, major_minor):
@@ -111,8 +112,7 @@ def _create_definitions(top_level):
     '''Returns OAS definitions for all protobuf top-level definitions'''
     refs = {ref for item in top_level for ref in _find_refs(item)}
     defs = {name: definition for item in top_level for name, definition in _find_definitions(item, refs)}
-    defs_prefixed = {_prefix_name(key): val for key, val in defs.items()}
-    return defs_prefixed
+    return {_prefix_name(key): val for key, val in defs.items()}
 
 
 def _create_raw_types_definitions(methods):
@@ -146,8 +146,7 @@ def _create_raw_types_definitions(methods):
 
             _def["description"] = type_def['description'] or ""
 
-            metadata = type_def.get('metadata', None)
-            if metadata:
+            if metadata := type_def.get('metadata', None):
                 # user-defined fields must start with 'x-'
                 _def["x-metadata"] = metadata
 
@@ -174,7 +173,7 @@ def _find_definitions(item, refs, prefix=()):
     elif isinstance(item, Enum):
         yield _define_enum(item, prefix)
     else:
-        raise TemplateError("Cannot create definition item {}".format(item))
+        raise TemplateError(f"Cannot create definition item {item}")
 
 
 def _find_message_definitions(message, refs, prefix):
@@ -225,7 +224,7 @@ def _resolve_type(type_name, refs, prefix):
         return {k: v for k, v in oas_type._asdict().items() if v is not None}
     else:
         ref_tuple = _resolve_named_type(type_name, refs, prefix)
-        ref_str = "#/definitions/{}".format(_prefix_name(".".join(ref_tuple)))
+        ref_str = f'#/definitions/{_prefix_name(".".join(ref_tuple))}'
         return {'$ref': ref_str}
 
 
@@ -239,9 +238,11 @@ def _resolve_named_type(type_name, refs, prefix):
         if full_ident in refs:
             return full_ident
     else:
-        raise TemplateError("Failed to find a reference for named type {}".format('/'.join(prefix + type_idents)))
+        raise TemplateError(
+            f"Failed to find a reference for named type {'/'.join(prefix + type_idents)}"
+        )
 
 
 def _prefix_name(name):
     '''Adds a "Model" prefix to type names to avoid naming collisions'''
-    return "Model.{}".format(name)
+    return f"Model.{name}"

@@ -53,23 +53,18 @@ class Api(object):
     def _post_octet_stream(self, method_name: str, data: bytes, accept: str = _OCTET_STREAM):
         '''Invokes a model method with binary data'''
         headers = {'Content-Type': _OCTET_STREAM, 'Accept': accept}
-        resp_data = self._post(method_name, data, headers)
-        return resp_data
+        return self._post(method_name, data, headers)
 
     def _post_text_stream(self, method_name: str, data: str, accept: str = _TEXT):
         '''Invokes a model method with binary data'''
         headers = {'Content-Type': _TEXT, 'Accept': accept}
-        resp_data = self._post(method_name, data, headers)
-        return resp_data
+        return self._post(method_name, data, headers)
 
     def _post_json(self, method_name, data, headers=None, *, convert=True, accept=_JSON):
         '''Invokes a model method with json data'''
         headers = {'Content-Type': _JSON, 'Accept': accept} if headers is None else headers
         resp_data = self._post(method_name, json.dumps(data), headers)
-        if convert:
-            return json.loads(resp_data.decode())
-        else:
-            return resp_data
+        return json.loads(resp_data.decode()) if convert else resp_data
 
     def _post_proto(self, method_name, data, headers=None):
         '''Invokes a model method with protobuf data'''
@@ -99,12 +94,12 @@ class Api(object):
 
     def _full_url(self, path):
         '''Creates a full URL given a path'''
-        return "{}{}".format(self._config.base_url, path)
+        return f"{self._config.base_url}{path}"
 
     def resolve_method(self, method_name):
         '''Returns a full URL given a method name'''
-        path = "/model/methods/{}".format(method_name)
-        return "{}{}".format(self._config.base_url, path)
+        path = f"/model/methods/{method_name}"
+        return f"{self._config.base_url}{path}"
 
 
 class ModelRunner(object):
@@ -123,7 +118,9 @@ class ModelRunner(object):
         if options is not None:
             full_options.update(options)
 
-        options_str = " ".join("--{} {}".format(key, value) for key, value in full_options.items())
+        options_str = " ".join(
+            f"--{key} {value}" for key, value in full_options.items()
+        )
         cmd = ['acumos_model_runner', options_str, model_dir]
         self._cmd = " ".join(cmd)
 
@@ -154,8 +151,8 @@ class _Config(namedtuple('_Config', ['base_url', 'ui_url', 'port'])):
 
     @classmethod
     def from_port(cls, port):
-        base_url = "http://localhost:{}".format(port)
-        ui_url = "{}/ui".format(base_url)
+        base_url = f"http://localhost:{port}"
+        ui_url = f"{base_url}/ui"
         return cls(base_url, ui_url, port)
 
 

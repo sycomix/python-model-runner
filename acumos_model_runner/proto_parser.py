@@ -78,8 +78,11 @@ class ProtoTransformer(Transformer):
 
     def enumbody(self, tokens):
         '''Returns a sequence of enum identifiers'''
-        enums = [enumfield.children[0].value for enumfield in tokens if enumfield.data == 'enumfield']
-        return enums
+        return [
+            enumfield.children[0].value
+            for enumfield in tokens
+            if enumfield.data == 'enumfield'
+        ]
 
 
 def parse_proto(proto_idl):
@@ -87,6 +90,9 @@ def parse_proto(proto_idl):
     parser = Lark(_PROTO_GRAMMAR, start='proto', parser='lalr')
     tree = parser.parse(proto_idl)
     trans_tree = ProtoTransformer().transform(tree)
-    top_level = [child for top_level in trans_tree.find_data('topleveldef')
-                 for child in top_level.children if isinstance(child, (Message, Enum))]
-    return top_level
+    return [
+        child
+        for top_level in trans_tree.find_data('topleveldef')
+        for child in top_level.children
+        if isinstance(child, (Message, Enum))
+    ]

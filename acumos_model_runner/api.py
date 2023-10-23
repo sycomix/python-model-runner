@@ -46,24 +46,23 @@ def methods(method_name: str):
         try:
             wrapped_resp = method.from_pb_bytes(data) if content_type == _PROTO else method.from_json(data)
         except DecodeError as err:
-            abort(Response("Could not decode input protobuf message: {}".format(err), 400))
+            abort(Response(f"Could not decode input protobuf message: {err}", 400))
         except ParseError as err:
-            abort(Response("Could not parse input JSON message: {}".format(err), 400))
+            abort(Response(f"Could not parse input JSON message: {err}", 400))
         except Exception as err:
-            abort(Response("Could not invoke method due to runtime error: {}".format(err), 400))
+            abort(Response(f"Could not invoke method due to runtime error: {err}", 400))
     else:
         if content_type == _TEXT:
             data = data.decode("utf-8")
         wrapped_resp = method.from_raw(raw_in=data)
 
-    if not output_is_raw:
-        if accept == _PROTO:
-            resp_data = wrapped_resp.as_pb_bytes()
-        else:  # accept == _JSON:
-            resp_data = wrapped_resp.as_json()
-    else:
+    if output_is_raw:
         resp_data = wrapped_resp.as_raw()
 
+    elif accept == _PROTO:
+        resp_data = wrapped_resp.as_pb_bytes()
+    else:  # accept == _JSON:
+        resp_data = wrapped_resp.as_json()
     return Response(resp_data, status=200, content_type=accept)
 
 
@@ -84,9 +83,9 @@ def _get_header(name: str, accepted_values: list):
     '''Returns a given request header and make sure its value is acceptable'''
     header = request.headers.get(name)
     if header is None:
-        abort(Response("Header '{}' is required".format(name), 400))
+        abort(Response(f"Header '{name}' is required", 400))
     if header not in accepted_values:
-        abort(Response("Header '{}' must be one of {}".format(name, accepted_values), 415))
+        abort(Response(f"Header '{name}' must be one of {accepted_values}", 415))
     return header
 
 

@@ -37,10 +37,10 @@ class Runner(object):
     def __init__(self, model_dir, port, host='localhost'):
         '''Helper class for managing model runners'''
         self.model_dir = model_dir
-        self.base_url = "http://{}:{}".format(host, port)
+        self.base_url = f"http://{host}:{port}"
         self.chains = dict()
 
-        cmd = "acumos_model_runner --host {} --port {} {}".format(host, port, model_dir)
+        cmd = f"acumos_model_runner --host {host} --port {port} {model_dir}"
         self.proc = pexpect.spawn(cmd)
         self.proc.expect(r'^.*(Booting worker with pid).*$', timeout=5)
 
@@ -50,17 +50,17 @@ class Runner(object):
 
     def call(self, method, data):
         '''Calls a model method with JSON data. If `method` is a chain, returns the downstream response'''
-        if method in self.chains:
-            upstream_method, downstream_runner, downstream_method = self.chains[method]
-            resp_up = requests.post(self._full_url(upstream_method), json=data, headers=self._HEADERS).json()
-            resp = downstream_runner.call(downstream_method, resp_up)
-        else:
-            resp = requests.post(self._full_url(method), json=data, headers=self._HEADERS).json()
-        return resp
+        if method not in self.chains:
+            return requests.post(
+                self._full_url(method), json=data, headers=self._HEADERS
+            ).json()
+        upstream_method, downstream_runner, downstream_method = self.chains[method]
+        resp_up = requests.post(self._full_url(upstream_method), json=data, headers=self._HEADERS).json()
+        return downstream_runner.call(downstream_method, resp_up)
 
     def _full_url(self, method):
         '''Returns a full url given a method name'''
-        return "{}/model/methods/{}".format(self.base_url, method)
+        return f"{self.base_url}/model/methods/{method}"
 
 
 if __name__ == '__main__':
